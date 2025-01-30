@@ -2,64 +2,72 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 )
 
 func main() {
 	if len(os.Args) != 2 {
-		log.Printf("ERROR: Need a singular branch name to swoop from")
+		fmt.Printf("ERROR: Need a singular branch name to swoop from")
 		os.Exit(126)
 	}
 
 	swoopBranch := os.Args[1]
 
-	currBranch, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output()
+	_, err := exec.Command("git", "status").Output()
 	if err != nil {
-		log.Panic("Error! Not in a git repository")
+		fmt.Println("ERROR: Not in a git repository")
+		return
 	}
 
-	fmt.Printf("\nYou are on branch %s\n", currBranch)
-	fmt.Printf("\nYou want to swoop on branch %s\n", swoopBranch)
+	currBranchBytes, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output()
+	currBranch := string(currBranchBytes[0:(len(currBranchBytes) - 1)])
+	if err != nil {
+		fmt.Println("ERROR: Unable to determine current working branch")
+		return
+	}
 
 	checkoutCmd := exec.Command("git", "checkout", swoopBranch)
-	err = checkoutCmd.Run()
+	checkoutOutput, err := checkoutCmd.CombinedOutput()
 	if err != nil {
-		fmt.Printf("\nERROR: Unable to checkout swoop branch `%s`", swoopBranch)
-		os.Exit(126)
+		fmt.Printf("\n%v\n", string(checkoutOutput))
+		fmt.Printf("\nERROR: Unable to checkout swoop branch `%s`\n", swoopBranch)
+		fmt.Printf("\nStill on origninal branch `%s`\n", currBranch)
+		return
 	}
 
-	pullCmd := exec.Command("git", "pull", swoopBranch)
-	err = pullCmd.Run()
+	pullCmd := exec.Command("git", "pull")
+	pullOutput, err := pullCmd.CombinedOutput()
 	if err != nil {
-		fmt.Printf("\nERROR: Unable to pull from swoop branch `%s`", swoopBranch)
-    reCheckoutErr := reCheckout(string(currBranch))
-    if reCheckoutErr != nil {
-
-    fmt.Printf("\nStill on swoop branch `%s`", swoopBranch)
-    } else {
-
-    fmt.Printf("\nReturned to original branch `%s`", string(currBranch))
-    }
-		os.Exit(126)
+		fmt.Printf("\n%v\n", string(pullOutput))
+		fmt.Printf("\nERROR: Unable to pull from swoop branch `%s`\n", swoopBranch)
+		reCheckoutErr := reCheckout(currBranch)
+		if reCheckoutErr != nil {
+			fmt.Printf("\nStill on swoop branch `%s`\n", swoopBranch)
+		} else {
+			fmt.Printf("\nReturned to original branch `%s`\n", currBranch)
+		}
+		return
+	} else {
+		fmt.Printf("\n%v\n", string(pullOutput))
 	}
 
-  err = reCheckout(string(currBranch))
-  if err != nil {
-    fmt.Printf("\nStill on swoop branch `%s`", swoopBranch)
-    os.Exit(126);
-  }
+	err = reCheckout(currBranch)
+	if err != nil {
+		fmt.Printf("\nStill on swoop branch `%s`\n", swoopBranch)
+		return
+	}
 
-	fmt.Printf("\nSuccessfully swooped from branch `%s` and returned to branch `%s`", swoopBranch, string(currBranch))
+	fmt.Printf("\nSuccessfully swooped from branch `%s` and returned to branch `%s`\n", swoopBranch, currBranch)
 }
 
-func reCheckout(currBranch string) (error){
-	reCheckoutCmd := exec.Command("git", "checkout", string(currBranch))
-	err := reCheckoutCmd.Run()
+func reCheckout(currBranch string) error {
+	reCheckoutCmd := exec.Command("git", "checkout", currBranch)
+	reCheckoutOutput, err := reCheckoutCmd.CombinedOutput()
 	if err != nil {
-		fmt.Printf("\nERROR: Unable to return to original branch `%s`", string(currBranch))
+		fmt.Printf("\n%v\n", string(reCheckoutOutput))
+		fmt.Printf("\nERROR: Unable to return to original branch `%s`\n", currBranch)
 	}
 
-	return err;
+	return err
 }
