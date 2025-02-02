@@ -25,8 +25,8 @@ import (
 
 func main() {
 	if len(os.Args) != 2 {
-		fmt.Printf("ERROR: Need a singular branch name to swoop from")
-		os.Exit(126)
+		fmt.Printf("ERROR: Need a singular branch name to swoop from\n")
+		os.Exit(1)
 	}
 
 	swoopBranch := os.Args[1]
@@ -37,14 +37,19 @@ func main() {
 			if swoopVersionParsed == "" {
 				swoopVersionParsed = info.Main.Version
 			}
-			fmt.Printf("\ngit-swoop %s, built with %s\n", swoopVersionParsed, info.GoVersion)
+
+			goVersionParsed := goVersion
+			if goVersion == "" {
+				goVersion = info.GoVersion
+			}
+			fmt.Printf("\ngit-swoop %s, built with %s\n", swoopVersionParsed, goVersionParsed)
 			fmt.Println("")
 			fmt.Println("git-swoop Copyright (C) 2025 Alex Muench")
 			fmt.Println("This program comes with ABSOLUTELY NO WARRANTY")
 			fmt.Println("This is free software, and you are welcome to redistribute it")
 			fmt.Println("under certain conditions; check the LICENSE.md file at `https://github.com/ammuench/git-swoop`")
 		}
-		return
+		os.Exit(1)
 	}
 
 	if swoopBranch == "-h" || swoopBranch == "-help" || swoopBranch == "--help" {
@@ -58,20 +63,20 @@ func main() {
 		fmt.Println("   --version (alias: -v, -version): prints the version and basic package info")
 		fmt.Println("")
 
-		return
+		os.Exit(1)
 	}
 
 	_, err := exec.Command("git", "status").Output()
 	if err != nil {
 		fmt.Println("ERROR: Not in a git repository")
-		return
+		os.Exit(1)
 	}
 
 	currBranchBytes, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output()
 	currBranch := string(currBranchBytes[0:(len(currBranchBytes) - 1)])
 	if err != nil {
 		fmt.Println("ERROR: Unable to determine current working branch")
-		return
+		os.Exit(1)
 	}
 
 	checkoutCmd := exec.Command("git", "checkout", swoopBranch)
@@ -80,7 +85,7 @@ func main() {
 		fmt.Printf("\n%v\n", string(checkoutOutput))
 		fmt.Printf("\nERROR: Unable to checkout swoop branch `%s`\n", swoopBranch)
 		fmt.Printf("\nStill on origninal branch `%s`\n", currBranch)
-		return
+		os.Exit(1)
 	}
 
 	pullCmd := exec.Command("git", "pull")
@@ -94,7 +99,7 @@ func main() {
 		} else {
 			fmt.Printf("\nReturned to original branch `%s`\n", currBranch)
 		}
-		return
+		os.Exit(1)
 	} else {
 		fmt.Printf("\n%v\n", string(pullOutput))
 	}
@@ -102,7 +107,7 @@ func main() {
 	err = reCheckout(currBranch)
 	if err != nil {
 		fmt.Printf("\nStill on swoop branch `%s`\n", swoopBranch)
-		return
+		os.Exit(1)
 	}
 
 	fmt.Printf("\nSuccessfully swooped from branch `%s` and returned to branch `%s`\n", swoopBranch, currBranch)
