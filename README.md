@@ -11,7 +11,7 @@ I found myself frequently needing to jump to our develop branch and work and the
 `git-swoop` can be installed by running
 
 ```bash
-go install github.com/ammuench/git-swoop
+go install github.com/ammuench/git-swoop@latest
 ```
 
 It should then be available in your terminal as `git-swoop`, if you cannot find it, you may need to configure your `GOBIN` or `GOPATH`.  [You can read the docs to configure that here](https://go.dev/ref/mod#go-install)
