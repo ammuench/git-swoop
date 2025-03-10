@@ -21,105 +21,160 @@ import (
 	"os"
 	"os/exec"
 	"runtime/debug"
+	"strings"
+)
+
+// Exit codes
+const (
+	ExitSuccess = 0
+	ExitFailure = 1
+)
+
+// Flag constants
+const (
+	FlagVersion      = "--version"
+	FlagVersionShort = "-v"
+	FlagVersionAlt   = "-version"
+	FlagHelp         = "--help"
+	FlagHelpShort    = "-h"
+	FlagHelpAlt      = "-help"
 )
 
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Printf("ERROR: Need a singular branch name to swoop from\n")
-		os.Exit(1)
+		printHelpInfo()
+		os.Exit(ExitFailure)
 	}
 
 	swoopBranch := os.Args[1]
 
-	if swoopBranch == "-version" || swoopBranch == "--version" || swoopBranch == "-v" {
-		if info, ok := debug.ReadBuildInfo(); ok {
-			swoopVersionParsed := swoopVersion
-			if swoopVersionParsed == "" {
-				swoopVersionParsed = info.Main.Version
-			}
-
-			goVersionParsed := goVersion
-			if goVersion == "" {
-				goVersion = info.GoVersion
-			}
-			fmt.Printf("\ngit-swoop %s, built with %s\n", swoopVersionParsed, goVersionParsed)
-			fmt.Println("")
-			fmt.Println("git-swoop Copyright (C) 2025 Alex Muench")
-			fmt.Println("This program comes with ABSOLUTELY NO WARRANTY")
-			fmt.Println("This is free software, and you are welcome to redistribute it")
-			fmt.Println("under certain conditions; check the LICENSE.md file at `https://github.com/ammuench/git-swoop`")
-		}
-		os.Exit(1)
+	// Handle flags
+	if handleFlags(swoopBranch) {
+		return
 	}
 
-	if swoopBranch == "-h" || swoopBranch == "-help" || swoopBranch == "--help" {
-		fmt.Println("")
-		fmt.Println("usage: git-swoop <target-branch-name>")
-		fmt.Println("   git-swoop will try to checkout your target branch, pull down the latest from remote,")
-		fmt.Println("   and then return to where you started")
-		fmt.Println("")
-		fmt.Println("flags:")
-		fmt.Println("   --help (alias: -h, -help): prints this message")
-		fmt.Println("   --version (alias: -v, -version): prints the version and basic package info")
-		fmt.Println("")
-
-		os.Exit(1)
-	}
-
-	_, err := exec.Command("git", "status").Output()
-	if err != nil {
+	// Verify we're in a git repository
+	if err := verifyGitRepo(); err != nil {
 		fmt.Println("ERROR: Not in a git repository")
-		os.Exit(1)
+		os.Exit(ExitFailure)
 	}
 
-	currBranchBytes, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output()
-	currBranch := string(currBranchBytes[0:(len(currBranchBytes) - 1)])
+	// Get current branch
+	currBranch, err := getCurrentBranch()
 	if err != nil {
-		fmt.Println("ERROR: Unable to determine current working branch")
-		os.Exit(1)
+		fmt.Println("ERROR: Unable to determine current working branch:", err)
+		os.Exit(ExitFailure)
 	}
 
-	checkoutCmd := exec.Command("git", "checkout", swoopBranch)
-	checkoutOutput, err := checkoutCmd.CombinedOutput()
+	// Checkout target branch
+	checkoutOutput, err := checkoutBranch(swoopBranch)
 	if err != nil {
 		fmt.Printf("\n%v\n", string(checkoutOutput))
 		fmt.Printf("\nERROR: Unable to checkout swoop branch `%s`\n", swoopBranch)
-		fmt.Printf("\nStill on origninal branch `%s`\n", currBranch)
-		os.Exit(1)
+		fmt.Printf("\nStill on original branch `%s`\n", currBranch)
+		os.Exit(ExitFailure)
 	}
 
+	// Pull latest changes
 	pullCmd := exec.Command("git", "pull")
 	pullOutput, err := pullCmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("\n%v\n", string(pullOutput))
 		fmt.Printf("\nERROR: Unable to pull from swoop branch `%s`\n", swoopBranch)
-		reCheckoutErr := reCheckout(currBranch)
+
+		// Try to go back to original branch
+		reCheckoutOutput, reCheckoutErr := checkoutBranch(currBranch)
 		if reCheckoutErr != nil {
+			fmt.Printf("\n%v\n", string(reCheckoutOutput))
+			fmt.Printf("\nERROR: Unable to return to original branch `%s`\n", currBranch)
 			fmt.Printf("\nStill on swoop branch `%s`\n", swoopBranch)
 		} else {
 			fmt.Printf("\nReturned to original branch `%s`\n", currBranch)
 		}
-		os.Exit(1)
+		os.Exit(ExitFailure)
 	} else {
 		fmt.Printf("\n%v\n", string(pullOutput))
 	}
 
-	err = reCheckout(currBranch)
+	// Return to original branch
+	_, err = checkoutBranch(currBranch)
 	if err != nil {
 		fmt.Printf("\nStill on swoop branch `%s`\n", swoopBranch)
-		os.Exit(1)
+		os.Exit(ExitFailure)
 	}
 
 	fmt.Printf("\nSuccessfully swooped from branch `%s` and returned to branch `%s`\n", swoopBranch, currBranch)
 }
 
-func reCheckout(currBranch string) error {
-	reCheckoutCmd := exec.Command("git", "checkout", currBranch)
-	reCheckoutOutput, err := reCheckoutCmd.CombinedOutput()
-	if err != nil {
-		fmt.Printf("\n%v\n", string(reCheckoutOutput))
-		fmt.Printf("\nERROR: Unable to return to original branch `%s`\n", currBranch)
+// processes command line flags and returns true if a flag was handled
+func handleFlags(flag string) bool {
+	switch flag {
+	case FlagVersion, FlagVersionShort, FlagVersionAlt:
+		printVersionInfo()
+		os.Exit(ExitSuccess)
+		return true
+	case FlagHelp, FlagHelpShort, FlagHelpAlt:
+		printHelpInfo()
+		os.Exit(ExitSuccess)
+		return true
+	default:
+		return false
+	}
+}
+
+func printVersionInfo() {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		fmt.Println("ERROR: Unable to read build information")
+		return
 	}
 
+	swoopVersionParsed := swoopVersion
+	if swoopVersionParsed == "" {
+		swoopVersionParsed = info.Main.Version
+	}
+
+	goVersionParsed := goVersion
+	if goVersionParsed == "" {
+		goVersionParsed = info.GoVersion
+	}
+
+	fmt.Printf("\ngit-swoop %s, built with %s\n", swoopVersionParsed, goVersionParsed)
+	fmt.Println("")
+	fmt.Println("git-swoop Copyright (C) 2025 Alex Muench")
+	fmt.Println("This program comes with ABSOLUTELY NO WARRANTY")
+	fmt.Println("This is free software, and you are welcome to redistribute it")
+	fmt.Println("under certain conditions; check the LICENSE.md file at `https://github.com/ammuench/git-swoop`")
+}
+
+func printHelpInfo() {
+	fmt.Println("")
+	fmt.Println("usage: git-swoop <target-branch-name>")
+	fmt.Println("   git-swoop will try to checkout your target branch, pull down the latest from remote,")
+	fmt.Println("   and then return to where you started")
+	fmt.Println("")
+	fmt.Println("flags:")
+	fmt.Println("   --help (alias: -h, -help): prints this message")
+	fmt.Println("   --version (alias: -v, -version): prints the version and basic package info")
+	fmt.Println("")
+}
+
+// verifyGitRepo checks if the current directory is a git repository by checking `git status`
+func verifyGitRepo() error {
+	_, err := exec.Command("git", "status").Output()
 	return err
+}
+
+func getCurrentBranch() (string, error) {
+	currBranchBytes, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(currBranchBytes)), nil
+}
+
+func checkoutBranch(branch string) ([]byte, error) {
+	checkoutCmd := exec.Command("git", "checkout", branch)
+	return checkoutCmd.CombinedOutput()
 }
