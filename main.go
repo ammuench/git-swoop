@@ -140,7 +140,7 @@ func printVersionInfo() {
 		goVersionParsed = info.GoVersion
 	}
 
-	fmt.Printf("\ngit-swoop %s, built with %s\n", swoopVersionParsed, goVersionParsed)
+	fmt.Printf("\ngit-swoop %s, built with go %s\n", swoopVersionParsed, goVersionParsed)
 	fmt.Println("")
 	fmt.Println("git-swoop Copyright (C) 2025 Alex Muench")
 	fmt.Println("This program comes with ABSOLUTELY NO WARRANTY")
